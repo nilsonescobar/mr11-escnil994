@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis EKBZ / MR11 — Dollarcity</title>
+<script src="libs/xlsx.full.min.js"></script>
+<script src="libs/papaparse.min.js"></script>
+<script src="libs/chart.umd.js"></script>
+<script src="libs/exceljs.min.js"></script>
+<style>
+  :root {
+    --verde: #005830; --verde-claro: #008755; --amarillo: #F7E620;
+    --gris: #282828; --fondo: #F4F6F5; --blanco: #FFFFFF; --borde: #DDE3E0;
+    --rojo: #FF0000;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Work Sans', 'Segoe UI', Arial, sans-serif; background: var(--fondo); color: var(--gris); min-height: 100vh; }
+
+  header { background: var(--verde); color: var(--blanco); padding: 14px 26px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  header h1 { font-family: 'Fat Frank', 'Work Sans', Arial, sans-serif; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.5px; }
+  header h1 span { color: var(--amarillo); }
+  header .sub { font-size: 0.78rem; opacity: 0.85; }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 20px 18px 60px; }
+
+  #zonaDrop { border: 3px dashed var(--verde-claro); border-radius: 16px; background: var(--blanco); padding: 56px 24px; text-align: center; cursor: pointer; transition: 0.2s; }
+  #zonaDrop.activo { background: #FFFDE2; border-color: var(--amarillo); }
+  #zonaDrop .icono { font-size: 3rem; margin-bottom: 12px; }
+  #zonaDrop h2 { font-size: 1.2rem; color: var(--verde); margin-bottom: 8px; }
+  #zonaDrop p { color: #666; font-size: 0.92rem; }
+  #zonaDrop .formatos { display: inline-block; margin-top: 14px; background: var(--verde); color: var(--amarillo); font-weight: 600; font-size: 0.78rem; padding: 5px 14px; border-radius: 999px; }
+  #inputArchivo { display: none; }
+  #cargando { display: none; text-align: center; padding: 18px; color: var(--verde); font-weight: 600; }
+  #app { display: none; }
+
+  /* Barra de estado de archivos + acciones */
+  #barraEstado { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--blanco); border: 1px solid var(--borde); border-left: 6px solid var(--amarillo); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; }
+  .chipFuente { padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: 0.74rem; }
+  .chipFuente.ok { background: var(--verde); color: var(--amarillo); }
+  .chipFuente.falta { background: #EEE; color: #999; }
+  .btnAccion { border: none; border-radius: 8px; padding: 9px 15px; cursor: pointer; font-family: inherit; font-weight: 700; font-size: 0.83rem; }
+  #btnDescargar { background: var(--verde); color: var(--blanco); margin-left: auto; }
+  #btnDescargar:hover { background: var(--verde-claro); }
+  #grupoDescarga { display: flex; flex-direction: column; gap: 4px; margin-left: auto; }
+  #toggleDescarga { display: flex; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; }
+  .modoDesc {
+    border: none; background: var(--blanco); color: #888;
+    font-family: inherit; font-size: 0.74rem; font-weight: 600;
+    padding: 5px 12px; cursor: pointer; transition: 0.15s;
+  }
+  .modoDesc:hover { background: var(--fondo); color: var(--gris); }
+  .modoDesc.activo { background: var(--verde); color: var(--amarillo); }
+  #btnDescargar { margin-left: 0; }
+  #btnOtros { background: var(--blanco); color: var(--gris); border: 1px solid var(--borde); }
+
+  /* Pestañas (las "ventanas") */
+  #pestanas { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .pestana { border: 1px solid var(--borde); background: var(--blanco); border-radius: 999px; padding: 9px 18px; cursor: pointer; font-family: inherit; font-weight: 700; font-size: 0.85rem; color: var(--gris); }
+  .pestana:hover { background: var(--fondo); }
+  .pestana.activa { background: var(--verde); color: var(--amarillo); border-color: var(--verde); }
+  .vista { display: none; }
+  .vista.activa { display: block; }
+
+  /* Tablas estilo libro Excel Dollarcity */
+  .panel { background: var(--blanco); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .tituloHoja { background: var(--verde); color: var(--amarillo); font-weight: 800; font-size: 1.02rem; text-align: center; padding: 10px; border-radius: 8px; margin-bottom: 12px; }
+  .tituloHoja.oscuro { background: var(--gris); color: var(--blanco); }
+  .contTabla { overflow: auto; max-height: 520px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  thead th { position: sticky; top: 0; z-index: 1; padding: 7px 10px; text-align: center; white-space: nowrap; border: 1px solid #000; }
+  th.enc-verde { background: var(--verde); color: var(--amarillo); }
+  th.enc-amarillo { background: var(--amarillo); color: #000; }
+  tbody td { padding: 5px 9px; border: 1px solid #C8C8C8; white-space: nowrap; background: var(--blanco); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.ctr { text-align: center; }
+  td.estado-pend { background: var(--rojo) !important; color: var(--amarillo); font-weight: 700; text-align: center; }
+  td.estado-proc { background: var(--verde) !important; color: var(--amarillo); font-weight: 700; text-align: center; }
+  tr.filaTotal td { background: var(--amarillo); font-weight: 800; }
+  tr.filaTotalVerde td { background: var(--verde); color: var(--blanco); font-weight: 800; }
+  tr.filaTotalOscura td { background: var(--gris); color: var(--blanco); font-weight: 800; }
+  tr.filaProvPivot td { background: var(--verde); color: var(--amarillo); font-weight: 700; cursor: pointer; }
+  tr.filaProvPivot:hover td { background: var(--verde-claro); }
+  tr.filaMontoPivot td { background: #F5F5F5; color: #000; }
+  tr.filaMontoPivot td:first-child { color: #646464; padding-left: 24px; }
+  tr.filaShipDet td { background: var(--verde); color: var(--amarillo); font-weight: 700; cursor: pointer; }
+  tr.filaOCDet td { background: var(--blanco); }
+  tr.filaOCDet td:first-child { padding-left: 30px; }
+  tr.filaOCDet td.pendTxt { color: #B40000; font-weight: 700; }
+  .notaTabla { font-size: 0.75rem; color: #777; margin-top: 8px; }
+
+  /* Controles (toggles, filtros, totales) */
+  .filaControles { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .ctl { display: flex; align-items: center; gap: 6px; }
+  .ctl label { background: var(--verde); color: var(--amarillo); font-weight: 700; font-size: 0.78rem; padding: 7px 12px; border-radius: 6px; }
+  .ctl select { background: var(--amarillo); border: 1px solid #000; border-radius: 6px; padding: 6px 10px; font-family: inherit; font-weight: 700; font-size: 0.82rem; }
+  .cajaTotal { display: inline-flex; flex-direction: column; border-radius: 8px; overflow: hidden; border: 1px solid #000; }
+  .cajaTotal .lab { background: var(--amarillo); color: #000; font-weight: 700; font-size: 0.76rem; padding: 5px 14px; text-align: center; }
+  .cajaTotal .val { background: var(--verde); color: var(--amarillo); font-weight: 800; font-size: 0.95rem; padding: 6px 14px; text-align: right; }
+  .cajaTotal.roja .val { background: var(--rojo); }
+  .aviso { background: #FFF8DC; border: 1px solid var(--amarillo); border-radius: 8px; padding: 12px 16px; font-size: 0.86rem; color: #6B5900; margin-bottom: 14px; }
+  .rejilla2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .rejilla2 { grid-template-columns: 1fr; } }
+
+  /* ===== Buscador ===== */
+  #barraBusqueda {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--blanco); border: 2px solid var(--verde-claro);
+    border-radius: 10px; padding: 8px 14px; margin-bottom: 14px;
+  }
+  .iconoBusq { font-size: 1rem; }
+  #campoBusqueda {
+    flex: 1; border: none; outline: none; font-family: inherit;
+    font-size: 0.9rem; background: transparent; color: var(--gris);
+  }
+  #campoBusqueda::placeholder { color: #AAA; }
+  #btnLimpiarBusq {
+    background: none; border: none; cursor: pointer; color: #AAA;
+    font-size: 1rem; padding: 2px 6px; border-radius: 4px;
+  }
+  #btnLimpiarBusq:hover { background: var(--fondo); color: var(--gris); }
+  #contadorBusq { font-size: 0.75rem; color: var(--verde-claro); font-weight: 600; white-space: nowrap; }
+  /* Resaltado de coincidencias */
+  .resaltado { background: #FFF176; border-radius: 2px; font-weight: 700; }
+  tr.ocultoBusq { display: none !important; }
+
+  footer { text-align: center; font-size: 0.75rem; color: #999; padding: 16px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ANÁLISIS <span>EKBZ / MR11</span></h1>
+  <div class="sub">Costos de flete SAP · Comparación F vs M · Dollarcity</div>
+</header>
+
+<main>
+  <div id="zonaDrop">
+    <div class="icono">🚚</div>
+    <h2>Arrastra tus exports de SAP aquí</h2>
+    <p>EKBZ_PO, EKBZ_SHIP y MR11 — juntos o por separado. Opcional: archivo/hoja "Master" (código → nombre de vendor)</p>
+    <div class="formatos">.XLSX · .XLS · .XLSB · .XLSM · .CSV</div>
+  </div>
+  <input type="file" id="inputArchivo" accept=".xlsx,.xls,.xlsb,.xlsm,.csv" multiple>
+  <div id="cargando">Procesando archivos…</div>
+
+  <div id="app">
+    <div id="barraEstado">
+      <span id="chipPO" class="chipFuente falta">EKBZ_PO</span>
+      <span id="chipSHIP" class="chipFuente falta">EKBZ_SHIPMNT</span>
+      <span id="chipMR" class="chipFuente falta">Data MR11</span>
+      <span id="chipMaster" class="chipFuente falta">Master (opcional)</span>
+      <div id="grupoDescarga">
+        <div id="toggleDescarga">
+          <button class="modoDesc activo" data-modo="analisis" title="Solo las 4 hojas de análisis (más rápido)">📊 Solo análisis</button>
+          <button class="modoDesc" data-modo="todo" title="Incluye también los datos crudos de SAP">📦 Data completa</button>
+        </div>
+        <button class="btnAccion" id="btnDescargar">⬇ Descargar Excel</button>
+      </div>
+      <button class="btnAccion" id="btnOtros">+ Cargar archivos</button>
+    </div>
+
+    <div id="pestanas">
+      <button class="pestana activa" data-v="vPO">Análisis EKBZ_PO</button>
+      <button class="pestana" data-v="vSHIP">Análisis EKBZ_SHIPMNT</button>
+      <button class="pestana" data-v="vMR">Análisis MR11</button>
+      <button class="pestana" data-v="vDASH">Dashboard MR11</button>
+    </div>
+
+    <div id="barraBusqueda">
+      <span class="iconoBusq">🔎</span>
+      <input type="text" id="campoBusqueda" placeholder="Buscar Bill of Lading, OC, Shipment, Proveedor…" autocomplete="off">
+      <button id="btnLimpiarBusq" title="Limpiar">✕</button>
+      <span id="contadorBusq"></span>
+    </div>
+
+    <div id="vPO" class="vista activa"></div>
+    <div id="vSHIP" class="vista"></div>
+    <div id="vMR" class="vista"></div>
+    <div id="vDASH" class="vista"></div>
+  </div>
+</main>
+
+<footer>Análisis EKBZ / MR11 · Réplica de las macros VBA del libro "Análisis EKBZ" · Todo el procesamiento ocurre en tu navegador, ningún dato sale de tu equipo.</footer>
+
+<script>
+/* =====================================================================
+   ANÁLISIS EKBZ / MR11 — Dollarcity
+   Réplica en JavaScript de las macros del libro "Análisis EKBZ - Macros":
+   - ProcesarEKBZ_PO   (ajuste de signos AR/AS + comparación F vs M por OC)
+   - ProcesarEKBZ_SHIPMNT (F vs M por Bill of Lading + Estado + tabla
+     cruzada con OCs + shipments únicos + toggle Multiplicar x100)
+   - ProcesarMR11      (OCs de Data MR11 -> shipments asociados)
+   - ProcesarDashboardMR11 (pivote Proveedor x Semana, solo pendientes,
+     con detalle por shipment y filtros de Semana/Vendor)
+   La descarga a Excel reproduce la misma estructura de hojas del libro.
+   ===================================================================== */
+
+// ----- Estado global -----
+let filasPO = null;      // matriz (header:1) de EKBZ_PO
+let filasSHIP = null;    // matriz de EKBZ_SHIPMNT
+let filasMR = null;      // matriz de Data MR11
+let dicMaster = {};      // código vendor -> nombre (hoja/archivo Master)
+
+let togglePO = 'NO';     // Multiplicar x100 en Analisis EKBZ_PO (G4)
+let toggleSHIP = 'NO';   // Multiplicar x100 en Analisis EKBZ_SHIPMNT (O7)
+let filtroOC_MR = 'TODAS';
+let filtroSemDash = 'TODAS';
+let filtroVenDash = 'TODOS';
+let shipsAbiertos = new Set();   // shipments expandidos en el detalle del dashboard
+
+// Resultados calculados (se regeneran con recalcularTodo)
+let R = {};
+
+// ----- DOM -----
+const zonaDrop = document.getElementById('zonaDrop');
+const inputArchivo = document.getElementById('inputArchivo');
+const app = document.getElementById('app');
+const cargando = document.getElementById('cargando');
+
+/* =====================================================
+   1. CARGA DE ARCHIVOS (sin popups; clasificación por nombre)
+   ===================================================== */
+zonaDrop.addEventListener('click', () => inputArchivo.click());
+zonaDrop.addEventListener('dragover', e => { e.preventDefault(); zonaDrop.classList.add('activo'); });
+zonaDrop.addEventListener('dragleave', () => zonaDrop.classList.remove('activo'));
+zonaDrop.addEventListener('drop', e => { e.preventDefault(); zonaDrop.classList.remove('activo'); if (e.dataTransfer.files.length) cargarArchivos(e.dataTransfer.files); });
+inputArchivo.addEventListener('change', e => { if (e.target.files.length) cargarArchivos(e.target.files); inputArchivo.value = ''; });
+document.getElementById('btnOtros').addEventListener('click', () => inputArchivo.click());
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => { e.preventDefault(); if (app.style.display === 'block' && e.dataTransfer.files.length) cargarArchivos(e.dataTransfer.files); });
+
+document.querySelectorAll('.pestana').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.pestana').forEach(x => x.classList.remove('activa'));
+    document.querySelectorAll('.vista').forEach(x => x.classList.remove('activa'));
+    b.classList.add('activa');
+    document.getElementById(b.dataset.v).classList.add('activa');
+  });
+});
+
+function quitarAcentos(t) { return String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+
+async function cargarArchivos(lista) {
+  cargando.style.display = 'block';
+  for (const archivo of lista) {
+    try { await leerArchivo(archivo); }
+    catch (err) { alert('No se pudo leer "' + archivo.name + '": ' + err.message); }
+  }
+  cargando.style.display = 'none';
+  zonaDrop.style.display = 'none';
+  app.style.display = 'block';
+  recalcularTodo();
+}
+
+function leerArchivo(archivo) {
+  return new Promise((resolver, rechazar) => {
+    const minus = archivo.name.toLowerCase();
+    if (minus.endsWith('.csv')) {
+      Papa.parse(archivo, {
+        header: false, skipEmptyLines: true,
+        complete: res => { clasificarHoja(archivo.name, null, res.data); resolver(); },
+        error: err => rechazar(err)
+      });
+    } else if (/\.(xlsx|xls|xlsb|xlsm)$/.test(minus)) {
+      const lector = new FileReader();
+      lector.onerror = () => rechazar(new Error('error de lectura'));
+      lector.onload = e => {
+        try {
+          // cellDates:true + raw:true -> fechas como Date reales y montos como
+          // números nativos: evita cualquier ambigüedad de formato regional
+          const libro = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+          for (const h of libro.SheetNames) {
+            const filas = XLSX.utils.sheet_to_json(libro.Sheets[h], { header: 1, defval: '', raw: true });
+            if (filas.length > 1) clasificarHoja(archivo.name, h, filas);
+          }
+          resolver();
+        } catch (err) { rechazar(err); }
+      };
+      lector.readAsArrayBuffer(archivo);
+    } else {
+      rechazar(new Error('formato no soportado'));
+    }
+  });
+}
+
+// Clasificación automática por nombre de archivo/hoja (sin preguntar)
+function clasificarHoja(nombreArchivo, nombreHoja, filas) {
+  const t = quitarAcentos(((nombreHoja || '') + ' ' + nombreArchivo).toUpperCase());
+  if (t.includes('MASTER')) { cargarMaster(filas); return; }
+  if (t.includes('SHIP')) { filasSHIP = filas; return; }
+  if (t.includes('EKBZ') && t.includes('PO')) { filasPO = filas; return; }
+  if (t.includes('MR11') || t.includes('MR 11')) { filasMR = filas; return; }
+  if (t.includes('EKBZ')) { filasPO = filas; return; }
+  // Desconocido: intentar por contenido (encabezado SAP típico de EKBZ)
+  const enc = (filas[0] || []).map(c => String(c));
+  if (enc.some(c => c.includes('Purchasing Document')) && enc.some(c => c.includes('Bill of Lading'))) {
+    if (!filasPO) filasPO = filas; else filasSHIP = filas;
+  } else if (enc.some(c => c.includes('Purch.Doc'))) {
+    filasMR = filas;
+  }
+}
+
+function cargarMaster(filas) {
+  dicMaster = {};
+  for (const f of filas) {
+    const cod = normalizarCodigo(f[0]);
+    if (cod && !(cod in dicMaster)) dicMaster[cod] = String(f[1] || '').trim();
+  }
+}
+
+/* =====================================================
+   2. UTILIDADES (réplicas exactas de las funciones VBA)
+   ===================================================== */
+// NormalizarCodigo: quita espacios y ceros a la izquierda para comparar
+function normalizarCodigo(val) {
+  const s = String(val == null ? '' : val).trim();
+  if (!s) return '';
+  const n = Number(s);
+  return isNaN(n) ? s.toUpperCase() : String(n);
+}
+
+// CalcularSemana: días desde el Posting Date hasta HOY
+// <7 = Sem 1 | <15 = Sem 2 | <21 = Sem 3 | <28 = Sem 4 | resto = +5 Sem
+function calcularSemana(fecha) {
+  if (!(fecha instanceof Date) || isNaN(fecha)) return '';
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const f = new Date(fecha); f.setHours(0, 0, 0, 0);
+  let dias = Math.round((hoy - f) / 86400000);
+  if (dias < 0) dias = 0;
+  if (dias < 7) return 'Sem 1';
+  if (dias < 15) return 'Sem 2';
+  if (dias < 21) return 'Sem 3';
+  if (dias < 28) return 'Sem 4';
+  return '+5 Sem';
+}
+
+// ClaveOrdenSemana: "Sem N" -> N, "+5 Sem" -> 99, desconocido -> 50
+function claveOrdenSemana(sem) {
+  const s = String(sem).trim().toUpperCase();
+  if (s.startsWith('+')) return 99;
+  if (s.startsWith('SEM')) { const n = parseInt(s.substring(3).trim(), 10); if (!isNaN(n)) return n; }
+  return 50;
+}
+
+function aNumero(v) {
+  if (v === '' || v == null) return null;
+  if (typeof v === 'number') return v;
+  const n = parseFloat(String(v).replace(/\s/g, '').replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+function aFecha(v) {
+  if (v instanceof Date) return v;
+  const t = String(v).trim();
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = t.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
+  if (m) { let a = +m[1], b = +m[2], anio = +m[3]; if (anio < 100) anio += 2000; let d, mo; if (a > 12) { d = a; mo = b; } else if (b > 12) { mo = a; d = b; } else { d = a; mo = b; } const f = new Date(anio, mo - 1, d); return isNaN(f) ? null : f; }
+  return null;
+}
+function fmt(n) { return (n == null || n === '') ? '-' : Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function pad10(v) { const s = String(v).trim(); return /^\d+$/.test(s) ? s.padStart(10, '0') : s; }
+
+// Índices de columnas EKBZ por nombre de encabezado (primera ocurrencia)
+function indicesEKBZ(filas) {
+  const enc = filas[0].map(c => String(c).trim());
+  const idx = nombre => enc.findIndex(c => c === nombre);
+  return {
+    OC: idx('Purchasing Document'),        // A
+    CAT: idx('PO History Category'),        // I
+    FECHA: idx('Posting Date'),             // J
+    L: idx('Amt.in loc.cur.'),              // L
+    O: idx('GR/IR clearing value in local currency'), // O (primera)
+    P: idx('Debit/Credit ind'),             // P (primera)
+    BILL: idx('Bill of Lading'),            // R
+    VEN: idx('Vendor')                      // S
+  };
+}
+
+// Ajuste de signos (fórmulas AR/AS del VBA)
+// AR (sobre L): vacío->null | L<0->L | (I=F y P=S)->-L | L
+// AS (sobre O): vacío->null | O<0->O | (I=M y P=H)->-O | O
+function valorAjustado(monto, cat, dc, catObjetivo, dcObjetivo) {
+  if (monto == null) return null;
+  if (monto < 0) return monto;
+  if (cat === catObjetivo && dc === dcObjetivo) return -monto;
+  return monto;
+}
+
+/* =====================================================
+   3. PROCESAMIENTO (réplica de cada macro)
+   ===================================================== */
+function recalcularTodo() {
+  R = {};
+  if (filasPO) R.po = procesarEKBZ(filasPO);
+  if (filasSHIP) {
+    R.ship = procesarEKBZ_porBill(filasSHIP);
+    if (filasPO) R.cruzada = tablaCruzada(R.ship, filasSHIP, filasPO);
+  }
+  if (filasMR && R.cruzada) R.mr = analisisMR11(filasMR, R.cruzada);
+  if (filasMR && R.cruzada) R.dash = dashboardMR11(filasMR, R.cruzada);
+
+  // Chips de estado
+  document.getElementById('chipPO').className = 'chipFuente ' + (filasPO ? 'ok' : 'falta');
+  document.getElementById('chipSHIP').className = 'chipFuente ' + (filasSHIP ? 'ok' : 'falta');
+  document.getElementById('chipMR').className = 'chipFuente ' + (filasMR ? 'ok' : 'falta');
+  document.getElementById('chipMaster').className = 'chipFuente ' + (Object.keys(dicMaster).length ? 'ok' : 'falta');
+
+  renderPO(); renderSHIP(); renderMR(); renderDASH();
+}
+
+// --- LlenarAnalisisPO: F vs M agrupado por Orden de Compra ---
+function procesarEKBZ(filas) {
+  const c = indicesEKBZ(filas);
+  const dicF = {}, dicM = {};
+  for (let i = 1; i < filas.length; i++) {
+    const f = filas[i];
+    const oc = String(f[c.OC] == null ? '' : f[c.OC]).trim();
+    if (!oc) continue;
+    const cat = String(f[c.CAT] || '').trim().toUpperCase();
+    const dc = String(f[c.P] || '').trim().toUpperCase();
+    if (cat === 'F') {
+      const ar = valorAjustado(aNumero(f[c.L]), cat, dc, 'F', 'S');
+      if (ar != null) dicF[oc] = (dicF[oc] || 0) + ar;
+      else if (!(oc in dicF)) dicF[oc] = 0;
+    } else if (cat === 'M') {
+      const as = valorAjustado(aNumero(f[c.O]), cat, dc, 'M', 'H');
+      if (as != null) dicM[oc] = (dicM[oc] || 0) + as;
+      else if (!(oc in dicM)) dicM[oc] = 0;
+    }
+  }
+  const claves = [...new Set([...Object.keys(dicF), ...Object.keys(dicM)])].sort();
+  const filasOut = claves.map(oc => {
+    const vF = dicF[oc] || 0, vM = dicM[oc] || 0;
+    return { oc, vF, vM, vVar: vF - vM };
+  });
+  return { filas: filasOut, totF: filasOut.reduce((s, r) => s + r.vF, 0), totM: filasOut.reduce((s, r) => s + r.vM, 0) };
+}
+
+// --- LlenarAnalisisSHIPMNT: F vs M agrupado por Bill of Lading + Estado ---
+function procesarEKBZ_porBill(filas) {
+  const c = indicesEKBZ(filas);
+  const dicF = {}, dicM = {};
+  for (let i = 1; i < filas.length; i++) {
+    const f = filas[i];
+    const bill = String(f[c.BILL] == null ? '' : f[c.BILL]).trim();
+    if (!bill) continue;
+    const cat = String(f[c.CAT] || '').trim().toUpperCase();
+    const dc = String(f[c.P] || '').trim().toUpperCase();
+    if (cat === 'F') {
+      const ar = valorAjustado(aNumero(f[c.L]), cat, dc, 'F', 'S');
+      if (ar != null) dicF[bill] = (dicF[bill] || 0) + ar;
+      else if (!(bill in dicF)) dicF[bill] = 0;
+    } else if (cat === 'M') {
+      const as = valorAjustado(aNumero(f[c.O]), cat, dc, 'M', 'H');
+      if (as != null) dicM[bill] = (dicM[bill] || 0) + as;
+      else if (!(bill in dicM)) dicM[bill] = 0;
+    }
+  }
+  const claves = [...new Set([...Object.keys(dicF), ...Object.keys(dicM)])];
+  const filasOut = claves.map(bill => {
+    const vF = dicF[bill] || 0, vM = dicM[bill] || 0, vVar = vF - vM;
+    // Estado exacto del VBA (calculado SIN el multiplicador x100):
+    let estado = '';
+    if (vF !== 0 && vM === 0) estado = 'Pendiente de procesar';
+    else if (vF !== 0 && vVar === 0) estado = 'Procesado';
+    return { bill, vF, vM, vVar, estado };
+  });
+  // OrdenarPorEstado: pendientes primero (alfabético), procesados después (alfabético)
+  const rango = e => e === 'Pendiente de procesar' ? 0 : (e === 'Procesado' ? 1 : 2);
+  filasOut.sort((a, b) => rango(a.estado) - rango(b.estado) || a.bill.localeCompare(b.bill));
+  return {
+    filas: filasOut,
+    totF: filasOut.reduce((s, r) => s + r.vF, 0),
+    totM: filasOut.reduce((s, r) => s + r.vM, 0),
+    noProcesadas: filasOut.filter(r => r.estado === 'Pendiente de procesar').length
+  };
+}
+
+// --- LlenarTablaCruzada: bills pendientes x OCs de EKBZ_PO + Semana + Vendor + Monto ---
+function tablaCruzada(ship, filasS, filasP) {
+  const cS = indicesEKBZ(filasS), cP = indicesEKBZ(filasP);
+
+  // Fecha más antigua y vendor por bill (desde EKBZ_SHIPMNT)
+  const fechaBill = {}, vendorBill = {};
+  for (let i = 1; i < filasS.length; i++) {
+    const f = filasS[i];
+    const bill = String(f[cS.BILL] == null ? '' : f[cS.BILL]).trim();
+    if (!bill) continue;
+    const fe = aFecha(f[cS.FECHA]);
+    if (fe && (!(bill in fechaBill) || fe < fechaBill[bill])) fechaBill[bill] = fe;
+    if (!(bill in vendorBill)) {
+      const cod = normalizarCodigo(f[cS.VEN]);
+      if (cod) vendorBill[bill] = dicMaster[cod] || String(f[cS.VEN]).trim();
+    }
+  }
+
+  // Bill -> OCs (todas las apariciones, desde EKBZ_PO)
+  const billOCs = {};
+  for (let i = 1; i < filasP.length; i++) {
+    const f = filasP[i];
+    const bill = String(f[cP.BILL] == null ? '' : f[cP.BILL]).trim();
+    const oc = String(f[cP.OC] == null ? '' : f[cP.OC]).trim();
+    if (!bill) continue;
+    if (!billOCs[bill]) billOCs[bill] = [];
+    billOCs[bill].push(oc);
+  }
+
+  // Una fila por cada OC que matchea un bill pendiente
+  const filasOut = [];
+  for (const r of ship.filas) {
+    if (r.estado !== 'Pendiente de procesar') continue;
+    const semana = fechaBill[r.bill] ? calcularSemana(fechaBill[r.bill]) : '';
+    const vendor = vendorBill[r.bill] || '';
+    const ocs = billOCs[r.bill] || [];
+    for (const oc of ocs) {
+      filasOut.push({ oc, bill: r.bill, estado: 'Pendiente de procesar', semana, vendor, monto: r.vF });
+    }
+  }
+
+  // Shipments únicos (Q:R): bill + primera semana
+  const unicos = [];
+  const vistos = new Set();
+  for (const f of filasOut) {
+    if (!vistos.has(f.bill)) { vistos.add(f.bill); unicos.push({ bill: f.bill, semana: f.semana }); }
+  }
+  return { filas: filasOut, unicos };
+}
+
+// --- ProcesarMR11: OCs de Data MR11 -> shipments asociados (desde la cruzada) ---
+// Data MR11 usa POSICIONES fijas como el VBA (los encabezados vienen desfasados):
+// A(0)=OC | K(10)=Monto | L(11)=Proveedor | T(19)=Semana
+function analisisMR11(filasM, cruzada) {
+  const ocsOrden = [];
+  const vistas = new Set();
+  for (let i = 1; i < filasM.length; i++) {
+    const oc = String(filasM[i][0] == null ? '' : filasM[i][0]).trim();
+    if (oc && !vistas.has(oc)) { vistas.add(oc); ocsOrden.push(oc); }
+  }
+  // Bills + estado por OC desde la cruzada (combinaciones únicas OC+Bill)
+  const bills = {}, estados = {}, combos = new Set();
+  for (const f of cruzada.filas) {
+    const clave = f.oc + '||' + f.bill;
+    if (combos.has(clave)) continue;
+    combos.add(clave);
+    if (!(f.oc in bills)) { bills[f.oc] = [pad10(f.bill)]; estados[f.oc] = f.estado; }
+    else {
+      bills[f.oc].push(pad10(f.bill));
+      if (f.estado === 'Pendiente de procesar') estados[f.oc] = 'Pendiente de procesar';
+    }
+  }
+  const filasOut = ocsOrden.map(oc => {
+    if (oc in bills) return { oc, bills: bills[oc].join(', '), estado: estados[oc], total: bills[oc].length };
+    return { oc, bills: 'No encontrado', estado: 'Sin shipment', total: 0 };
+  });
+  return { filas: filasOut, ocsOrden };
+}
+
+// --- ProcesarDashboardMR11: pivote Proveedor x Semana (solo pendientes) ---
+function dashboardMR11(filasM, cruzada) {
+  // dicShipmnt: OC -> bills únicos pendientes (desde la cruzada G:I)
+  const dicShipmnt = {}, combos = new Set();
+  for (const f of cruzada.filas) {
+    if (f.estado !== 'Pendiente de procesar') continue;
+    const clave = f.oc + '||' + f.bill;
+    if (combos.has(clave)) continue;
+    combos.add(clave);
+    if (!dicShipmnt[f.oc]) dicShipmnt[f.oc] = [];
+    dicShipmnt[f.oc].push(f.bill);
+  }
+
+  const semanas = new Set(), proveedores = new Set();
+  const pivotShips = {}, pivotMontos = {};
+  const shipsUnicos = new Set();
+  const shipSemana = {}, shipVendor = {}, shipOCs = {}, shipOCUniq = new Set();
+
+  for (let i = 1; i < filasM.length; i++) {
+    const f = filasM[i];
+    const oc = String(f[0] == null ? '' : f[0]).trim();
+    const monto = aNumero(f[10]) || 0;             // K
+    const proveedor = String(f[11] == null ? '' : f[11]).trim(); // L
+    const semana = String(f[19] == null ? '' : f[19]).trim();    // T
+    if (!oc || !proveedor || !semana) continue;
+
+    semanas.add(semana);
+    proveedores.add(proveedor);
+    if (!dicShipmnt[oc]) continue;   // solo OCs con shipments pendientes
+
+    const clave = proveedor + '||' + semana;
+    if (!(clave in pivotShips)) { pivotShips[clave] = 0; pivotMontos[clave] = 0; }
+    pivotMontos[clave] += monto;
+
+    for (const ship of dicShipmnt[oc]) {
+      const claveSP = proveedor + '||' + semana + '||' + ship;
+      if (!shipsUnicos.has(claveSP)) { shipsUnicos.add(claveSP); pivotShips[clave] += 1; }
+      if (!(ship in shipSemana)) { shipSemana[ship] = semana; shipVendor[ship] = proveedor; shipOCs[ship] = []; }
+      const claveSO = ship + '||' + oc;
+      if (!shipOCUniq.has(claveSO)) { shipOCUniq.add(claveSO); shipOCs[ship].push(oc); }
+    }
+  }
+
+  const arrSem = [...semanas].sort((a, b) => claveOrdenSemana(a) - claveOrdenSemana(b));
+  const arrProv = [...proveedores].sort();
+  const detalle = Object.keys(shipSemana).map(ship => ({
+    ship, semana: shipSemana[ship], vendor: shipVendor[ship], ocs: shipOCs[ship]
+  }));
+  return { arrSem, arrProv, pivotShips, pivotMontos, detalle };
+}
+
+/* =====================================================
+   4. RENDERIZADO DE CADA VENTANA
+   ===================================================== */
+function factorPO() { return togglePO === 'SI' ? 100 : 1; }
+function factorSHIP() { return toggleSHIP === 'SI' ? 100 : 1; }
+
+// --- Ventana 1: Análisis EKBZ_PO ---
+function renderPO() {
+  const v = document.getElementById('vPO');
+  if (!R.po) { v.innerHTML = '<div class="aviso">Carga el export <strong>EKBZ_PO</strong> para ver este análisis.</div>'; return; }
+  const fac = factorPO();
+  const totVar = R.po.filas.reduce((s, r) => s + r.vVar * fac, 0);
+
+  let html = `<div class="panel">
+    <div class="tituloHoja oscuro">ANÁLISIS EKBZ_PO - COMPARACIÓN F vs M</div>
+    <div class="filaControles">
+      <div class="ctl"><label>Multiplicar x100</label>
+        <select id="tgPO"><option ${togglePO === 'NO' ? 'selected' : ''}>NO</option><option ${togglePO === 'SI' ? 'selected' : ''}>SI</option></select></div>
+      <div class="cajaTotal"><div class="lab">Total</div><div class="val">${fmt(totVar)}</div></div>
+    </div>
+    <div class="contTabla"><table>
+      <thead><tr><th class="enc-amarillo">Orden de Compra</th><th class="enc-amarillo">Valor F</th><th class="enc-amarillo">Valor M</th><th class="enc-amarillo">Variación (F - M)</th></tr></thead>
+      <tbody>
+        ${R.po.filas.map(r => `<tr><td>${esc(r.oc)}</td><td class="num">${fmt(r.vF)}</td><td class="num">${fmt(r.vM)}</td><td class="num">${fmt(r.vVar * fac)}</td></tr>`).join('')}
+        <tr class="filaTotal"><td style="background:var(--gris);color:#fff;text-align:center;">TOTAL</td><td class="num">${fmt(R.po.totF)}</td><td class="num">${fmt(R.po.totM)}</td><td class="num">${fmt(totVar)}</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notaTabla">${R.po.filas.length} órdenes de compra</div>
+  </div>`;
+  v.innerHTML = html;
+  document.getElementById('tgPO').addEventListener('change', e => { togglePO = e.target.value; renderPO(); });
+}
+
+// --- Ventana 2: Análisis EKBZ_SHIPMNT (tabla F/M + cruzada + únicos) ---
+function renderSHIP() {
+  const v = document.getElementById('vSHIP');
+  if (!R.ship) { v.innerHTML = '<div class="aviso">Carga el export <strong>EKBZ_SHIP</strong> para ver este análisis.</div>'; return; }
+  const fac = factorSHIP();
+  const s = R.ship;
+
+  let html = `<div class="panel">
+    <div class="tituloHoja">ANALISIS EKBZ_SHIPMNT - COMPARACION F vs M</div>
+    <div class="filaControles">
+      <div class="ctl"><label>Multiplicar x100</label>
+        <select id="tgSHIP"><option ${toggleSHIP === 'NO' ? 'selected' : ''}>NO</option><option ${toggleSHIP === 'SI' ? 'selected' : ''}>SI</option></select></div>
+      <div class="cajaTotal roja"><div class="lab">Total no procesadas</div><div class="val">${s.noProcesadas}</div></div>
+    </div>
+    <div class="rejilla2">
+      <div>
+        <div class="contTabla"><table>
+          <thead><tr><th class="enc-verde">Bill of Lading</th><th class="enc-verde">Valor F</th><th class="enc-verde">Valor M</th><th class="enc-verde">Variacion (F - M)</th><th class="enc-verde">Estado</th></tr></thead>
+          <tbody>
+            ${s.filas.map(r => `<tr><td>${esc(r.bill)}</td><td class="num">${fmt(r.vF)}</td><td class="num">${fmt(r.vM)}</td><td class="num">${fmt(r.vVar * fac)}</td>
+              <td class="${r.estado === 'Pendiente de procesar' ? 'estado-pend' : (r.estado === 'Procesado' ? 'estado-proc' : '')}">${esc(r.estado)}</td></tr>`).join('')}
+            <tr class="filaTotalVerde"><td style="text-align:center;">TOTAL</td><td class="num">${fmt(s.totF)}</td><td class="num">${fmt(s.totM)}</td><td class="num">${fmt(s.filas.reduce((x, r) => x + r.vVar * fac, 0))}</td><td></td></tr>
+          </tbody>
+        </table></div>
+        <div class="notaTabla">${s.filas.length} bills of lading</div>
+      </div>
+      <div>
+        <div class="contTabla"><table>
+          <thead><tr><th class="enc-verde">Bill of Lading</th><th class="enc-verde">Semana</th></tr></thead>
+          <tbody>${R.cruzada ? R.cruzada.unicos.map(u => `<tr><td>${esc(u.bill)}</td><td class="ctr">${esc(u.semana)}</td></tr>`).join('') : ''}</tbody>
+        </table></div>
+        <div class="notaTabla">Shipments únicos (pendientes): ${R.cruzada ? R.cruzada.unicos.length : 0}</div>
+      </div>
+    </div>
+  </div>`;
+
+  if (R.cruzada) {
+    html += `<div class="panel">
+      <div class="tituloHoja">TABLA CRUZADA — BILLS PENDIENTES × OCs DE EKBZ_PO</div>
+      <div class="contTabla"><table>
+        <thead><tr><th class="enc-verde">Purchasing Document</th><th class="enc-verde">Bill of Lading</th><th class="enc-verde">Estado</th><th class="enc-verde">Semana</th><th class="enc-verde">Vendor</th><th class="enc-verde">Monto</th></tr></thead>
+        <tbody>${R.cruzada.filas.map(f => `<tr><td>${esc(f.oc)}</td><td>${esc(f.bill)}</td><td class="estado-pend">Pendiente de procesar</td><td class="ctr">${esc(f.semana)}</td><td>${esc(f.vendor)}</td><td class="num">${fmt(f.monto * fac)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <div class="notaTabla">${R.cruzada.filas.length} combinaciones OC × Bill pendientes${Object.keys(dicMaster).length ? '' : ' · Sin archivo Master: la columna Vendor muestra el código en vez del nombre'}</div>
+    </div>`;
+  } else if (!filasPO) {
+    html += `<div class="aviso">Para generar la <strong>tabla cruzada</strong> (OC × Bill) también necesitas cargar el export <strong>EKBZ_PO</strong>.</div>`;
+  }
+  v.innerHTML = html;
+  document.getElementById('tgSHIP').addEventListener('change', e => { toggleSHIP = e.target.value; renderSHIP(); renderDASH(); });
+}
+
+// --- Ventana 3: Análisis MR11 (OC -> shipments) ---
+function renderMR() {
+  const v = document.getElementById('vMR');
+  if (!R.mr) {
+    v.innerHTML = `<div class="aviso">Para este análisis necesitas cargar <strong>MR11</strong>, <strong>EKBZ_SHIP</strong> y <strong>EKBZ_PO</strong> (el cruce sale de los tres).</div>`;
+    return;
+  }
+  const filas = filtroOC_MR === 'TODAS' ? R.mr.filas : R.mr.filas.filter(r => r.oc === filtroOC_MR);
+  v.innerHTML = `<div class="panel">
+    <div class="tituloHoja oscuro">ANÁLISIS MR11 - CRUCE CON SHIPMENTS</div>
+    <div class="filaControles">
+      <div class="ctl"><label>Filtrar por OC</label>
+        <select id="fOCmr"><option ${filtroOC_MR === 'TODAS' ? 'selected' : ''}>TODAS</option>${R.mr.ocsOrden.map(o => `<option ${filtroOC_MR === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>
+    </div>
+    <div class="contTabla"><table>
+      <thead><tr><th class="enc-amarillo">Orden de Compra</th><th class="enc-amarillo">Shipments</th><th class="enc-amarillo">Estado</th><th class="enc-amarillo">Total Shipments</th></tr></thead>
+      <tbody>${filas.map(r => `<tr><td>${esc(r.oc)}</td><td style="white-space:normal;max-width:520px;">${esc(r.bills)}</td>
+        <td class="${r.estado === 'Pendiente de procesar' ? 'estado-pend' : (r.estado === 'Procesado' ? 'estado-proc' : '')}" ${r.estado === 'Sin shipment' ? 'style="color:#969696;"' : ''}>${esc(r.estado)}</td>
+        <td class="ctr" ${r.total > 1 ? 'style="background:var(--verde);color:var(--amarillo);font-weight:700;"' : ''}>${r.total}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <div class="notaTabla">${filas.length} de ${R.mr.filas.length} OCs únicas</div>
+  </div>`;
+  document.getElementById('fOCmr').addEventListener('change', e => { filtroOC_MR = e.target.value; renderMR(); });
+}
+
+// --- Ventana 4: Dashboard MR11 (pivote + detalle) ---
+function renderDASH() {
+  const v = document.getElementById('vDASH');
+  if (!R.dash) {
+    v.innerHTML = `<div class="aviso">Para el dashboard necesitas cargar <strong>MR11</strong>, <strong>EKBZ_SHIP</strong> y <strong>EKBZ_PO</strong>.</div>`;
+    return;
+  }
+  const d = R.dash;
+  const fac = factorSHIP();
+  const colSem = d.arrSem;
+
+  // Pivote: fila shipments (verde) + fila monto (gris) por proveedor
+  let cuerpo = '';
+  const totSemShips = {}, totSemMontos = {};
+  let totShipsG = 0, totMontoG = 0;
+  for (const prov of d.arrProv) {
+    let totS = 0, totM = 0;
+    let filaS = `<tr class="filaProvPivot"><td>${esc(prov)}</td>`;
+    let filaM = `<tr class="filaMontoPivot"><td>Monto</td>`;
+    for (const sem of colSem) {
+      const clave = prov + '||' + sem;
+      const nS = d.pivotShips[clave] || 0;
+      const nM = (d.pivotMontos[clave] || 0) * fac;
+      filaS += `<td class="ctr">${nS}</td>`;
+      filaM += `<td class="num">${fmt(nM)}</td>`;
+      totS += nS; totM += nM;
+      totSemShips[sem] = (totSemShips[sem] || 0) + nS;
+      totSemMontos[sem] = (totSemMontos[sem] || 0) + nM;
+    }
+    filaS += `<td class="ctr">${totS}</td></tr>`;
+    filaM += `<td class="num">${fmt(totM)}</td></tr>`;
+    cuerpo += filaS + filaM;
+    totShipsG += totS; totMontoG += totM;
+  }
+  cuerpo += `<tr class="filaTotalOscura"><td>TOTAL Shipments</td>${colSem.map(s => `<td class="ctr">${totSemShips[s] || 0}</td>`).join('')}<td class="ctr">${totShipsG}</td></tr>`;
+  cuerpo += `<tr class="filaTotalOscura"><td>TOTAL Monto</td>${colSem.map(s => `<td class="num">${fmt(totSemMontos[s] || 0)}</td>`).join('')}<td class="num">${fmt(totMontoG)}</td></tr>`;
+
+  // Detalle con filtros de Semana y Vendor (réplica del Worksheet_Change)
+  const detFiltrado = d.detalle.filter(x =>
+    (filtroSemDash === 'TODAS' || x.semana === filtroSemDash) &&
+    (filtroVenDash === 'TODOS' || x.vendor === filtroVenDash));
+
+  let detalleHTML = '';
+  for (const x of detFiltrado) {
+    const abierto = shipsAbiertos.has(x.ship);
+    detalleHTML += `<tr class="filaShipDet" data-ship="${esc(x.ship)}">
+      <td>${abierto ? '▾' : '▸'} ${esc(x.ship)}</td><td class="ctr">${esc(x.semana)}</td>
+      <td class="ctr">Pendiente de procesar</td><td class="ctr">${x.ocs.length}</td><td>${esc(x.vendor)}</td></tr>`;
+    if (abierto) {
+      for (const oc of x.ocs) {
+        detalleHTML += `<tr class="filaOCDet"><td>${esc(oc)}</td><td class="ctr">${esc(x.semana)}</td><td class="ctr pendTxt">Pendiente de procesar</td><td></td><td>${esc(x.vendor)}</td></tr>`;
+      }
+    }
+  }
+
+  v.innerHTML = `<div class="panel">
+    <div class="tituloHoja">DASHBOARD MR11 - ANÁLISIS POR SEMANAS (Solo Pendientes)</div>
+    <div class="contTabla"><table>
+      <thead><tr><th class="enc-verde">Proveedor</th>${colSem.map(s => `<th class="enc-verde">${esc(s)}</th>`).join('')}<th class="enc-verde">TOTAL</th></tr></thead>
+      <tbody>${cuerpo}</tbody>
+    </table></div>
+  </div>
+  <div class="panel">
+    <div class="tituloHoja">DETALLE POR SHIPMENT - OCs ASOCIADAS</div>
+    <div class="filaControles">
+      <div class="ctl"><label>Filtrar Semana</label>
+        <select id="fSemD"><option ${filtroSemDash === 'TODAS' ? 'selected' : ''}>TODAS</option>${d.arrSem.map(s => `<option ${filtroSemDash === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+      <div class="ctl"><label>Filtrar Vendor</label>
+        <select id="fVenD"><option ${filtroVenDash === 'TODOS' ? 'selected' : ''}>TODOS</option>${d.arrProv.map(p => `<option ${filtroVenDash === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></div>
+    </div>
+    <div class="contTabla"><table>
+      <thead><tr><th class="enc-verde">Shipment</th><th class="enc-verde">Semana</th><th class="enc-verde">Estado</th><th class="enc-verde"># OCs</th><th class="enc-verde">Vendor</th></tr></thead>
+      <tbody>${detalleHTML}</tbody>
+    </table></div>
+    <div class="notaTabla">${detFiltrado.length} shipments (clic en un shipment para ver sus OCs)</div>
+  </div>`;
+
+  document.getElementById('fSemD').addEventListener('change', e => { filtroSemDash = e.target.value; renderDASH(); });
+  document.getElementById('fVenD').addEventListener('change', e => { filtroVenDash = e.target.value; renderDASH(); });
+  v.querySelectorAll('tr.filaShipDet').forEach(tr => {
+    tr.addEventListener('click', () => {
+      const s = tr.dataset.ship;
+      if (shipsAbiertos.has(s)) shipsAbiertos.delete(s); else shipsAbiertos.add(s);
+      renderDASH();
+    });
+  });
+}
+
+/* =====================================================
+   5. DESCARGA A EXCEL — misma estructura de hojas del libro original
+   (valores calculados con el estado actual de los toggles y filtros;
+   SheetJS community no escribe colores, la estructura y valores sí
+   son idénticos a las hojas del libro)
+   ===================================================== */
+// ============================================================
+//  TOGGLE: modo de descarga (solo análisis vs. data completa)
+// ============================================================
+let modoDescarga = 'analisis';   // 'analisis' | 'todo'
+
+document.querySelectorAll('.modoDesc').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.modoDesc').forEach(b => b.classList.remove('activo'));
+    btn.classList.add('activo');
+    modoDescarga = btn.dataset.modo;
+    // Actualizar etiqueta del botón para dejar claro lo que descargará
+    document.getElementById('btnDescargar').textContent =
+      modoDescarga === 'todo'
+        ? '⬇ Descargar Excel (7 hojas)'
+        : '⬇ Descargar Excel';
+  });
+});
+
+// ============================================================
+//  BUSCADOR GLOBAL — filtra filas en la vista activa
+// ============================================================
+let terminoBusqueda = '';
+
+document.getElementById('campoBusqueda').addEventListener('input', function() {
+  terminoBusqueda = this.value.trim().toLowerCase();
+  aplicarBusqueda();
+});
+document.getElementById('btnLimpiarBusq').addEventListener('click', () => {
+  document.getElementById('campoBusqueda').value = '';
+  terminoBusqueda = '';
+  aplicarBusqueda();
+});
+
+function aplicarBusqueda() {
+  const vistaActual = document.querySelector('.vista.activa');
+  if (!vistaActual) return;
+  const filas = vistaActual.querySelectorAll('tbody tr');
+  let visibles = 0, total = 0;
+
+  filas.forEach(tr => {
+    // Quitar resaltados anteriores en celdas de texto
+    tr.querySelectorAll('td').forEach(td => {
+      if (td.dataset.original !== undefined) td.innerHTML = td.dataset.original;
+    });
+    if (!terminoBusqueda) {
+      tr.classList.remove('ocultoBusq');
+      total++;
+    } else {
+      const textoFila = tr.textContent.toLowerCase();
+      if (textoFila.includes(terminoBusqueda)) {
+        tr.classList.remove('ocultoBusq');
+        // Resaltar en cada celda
+        tr.querySelectorAll('td').forEach(td => {
+          const txt = td.textContent;
+          if (txt.toLowerCase().includes(terminoBusqueda)) {
+            if (td.dataset.original === undefined) td.dataset.original = td.innerHTML;
+            const re = new RegExp('(' + terminoBusqueda.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+            td.innerHTML = td.dataset.original.replace(re, '<mark class="resaltado">$1</mark>');
+          }
+        });
+        visibles++; total++;
+      } else {
+        tr.classList.add('ocultoBusq');
+        total++;
+      }
+    }
+  });
+
+  const contador = document.getElementById('contadorBusq');
+  if (terminoBusqueda && total > 0) {
+    contador.textContent = visibles + ' de ' + total + ' resultados';
+  } else {
+    contador.textContent = '';
+  }
+}
+
+// Limpiar búsqueda al cambiar de pestaña y reaplicar en la nueva
+document.querySelectorAll('.pestana').forEach(b => {
+  b.addEventListener('click', () => {
+    // Limpiar resaltados antes de cambiar de vista
+    document.querySelectorAll('.vista td[data-original]').forEach(td => {
+      td.innerHTML = td.dataset.original;
+      delete td.dataset.original;
+    });
+    // Reaplicar en la nueva vista (tras el render que ocurre en el mismo tick)
+    setTimeout(aplicarBusqueda, 50);
+  });
+});
+
+// ============================================================
+//  DESCARGA EXCEL CON FORMATO COMPLETO — usa ExcelJS (MIT)
+//  que SÍ soporta colores, bordes y fuentes en el navegador.
+// ============================================================
+async function descargarExcelFormateado() {
+  if (!R.po && !R.ship && !R.mr && !R.dash) {
+    alert('Aún no hay análisis para exportar. Carga primero los archivos.');
+    return;
+  }
+
+  // ExcelJS debe estar cargado como global window.ExcelJS
+  if (typeof ExcelJS === 'undefined') {
+    alert('La librería ExcelJS no está cargada. Verifica que el archivo libs/exceljs.min.js esté disponible.');
+    return;
+  }
+
+  const wb = new ExcelJS.Workbook();
+  const facP = factorPO(), facS = factorSHIP();
+
+  // Paleta Dollarcity
+  const C = {
+    VERDE:       '005830', VERDE_CLARO: '008755', AMARILLO: 'F7E620',
+    GRIS:        '282828', ROJO:        'FF0000', BLANCO:   'FFFFFF',
+    GRIS_CLARO:  'F5F5F5', BORDE_SUB:   'C8C8C8', NEGRO:    '000000',
+    BORDE_NEGRO: '000000', NUM:         '#,##0.00;-#,##0.00;-'
+  };
+
+  // Estilos de celda reutilizables como funciones
+  const fill   = hex => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex } });
+  const font   = (bold, color, sz) => ({ bold: !!bold, color: { argb: 'FF' + (color || C.NEGRO) }, size: sz || 11, name: 'Calibri' });
+  const alin   = (h, v, wrap) => ({ horizontal: h || 'left', vertical: v || 'middle', wrapText: !!wrap });
+  const borde  = color => { const s = { style: 'thin', color: { argb: 'FF' + (color || C.BORDE_SUB) } }; return { top: s, bottom: s, left: s, right: s }; };
+
+  // Helpers de estilo compuesto
+  const S = {
+    encVerde:  { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('center'), border: borde(C.NEGRO), numFmt: '@' },
+    encAmari:  { fill: fill(C.AMARILLO),   font: font(true, C.NEGRO),     alignment: alin('center'), border: borde(C.NEGRO), numFmt: '@' },
+    encGris:   { fill: fill(C.GRIS),       font: font(true, C.BLANCO),    alignment: alin('center'), border: borde(C.NEGRO) },
+    datoTxt:   { fill: fill(C.BLANCO),     font: font(false, C.NEGRO),    alignment: alin('left'),   border: borde() },
+    datoNum:   { fill: fill(C.BLANCO),     font: font(false, C.NEGRO),    alignment: alin('right'),  border: borde(), numFmt: C.NUM },
+    totAmari:  { fill: fill(C.AMARILLO),   font: font(true, C.NEGRO),     alignment: alin('right'),  border: borde(C.NEGRO), numFmt: C.NUM },
+    totVerde:  { fill: fill(C.VERDE),      font: font(true, C.BLANCO),    alignment: alin('right'),  border: borde(C.NEGRO), numFmt: C.NUM },
+    totGris:   { fill: fill(C.GRIS),       font: font(true, C.BLANCO),    alignment: alin('right'),  border: borde(C.NEGRO), numFmt: C.NUM },
+    totGrisC:  { fill: fill(C.GRIS),       font: font(true, C.BLANCO),    alignment: alin('center'), border: borde(C.NEGRO) },
+    pendRojo:  { fill: fill(C.ROJO),       font: font(true, C.AMARILLO),  alignment: alin('center'), border: borde(C.NEGRO) },
+    procVerde: { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('center'), border: borde(C.NEGRO) },
+    pivProv:   { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('left'),   border: borde(C.NEGRO) },
+    pivProvC:  { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('center'), border: borde(C.NEGRO) },
+    grisClaro: { fill: fill(C.GRIS_CLARO), font: font(false, '646464'),   alignment: alin('left'),   border: borde() },
+    grisClaroN:{ fill: fill(C.GRIS_CLARO), font: font(false, C.NEGRO),    alignment: alin('right'),  border: borde(), numFmt: C.NUM },
+    shipDet:   { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('left'),   border: borde(C.NEGRO) },
+    shipDetC:  { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('center'), border: borde(C.NEGRO) },
+    ocDet:     { fill: fill(C.BLANCO),     font: font(false, C.NEGRO),    alignment: alin('left'),   border: borde() },
+    ocDetPend: { fill: fill(C.BLANCO),     font: font(true, 'B40000'),    alignment: alin('center'), border: borde() },
+    ocDetC:    { fill: fill(C.BLANCO),     font: font(false, C.NEGRO),    alignment: alin('center'), border: borde() },
+    toggle:    { fill: fill(C.VERDE),      font: font(true, C.AMARILLO),  alignment: alin('right') },
+    toggleVal: { fill: fill(C.AMARILLO),   font: font(true, C.NEGRO),     alignment: alin('center') },
+  };
+
+  // Aplicar estilo a una celda (ref = 'A1', 'B5', etc.)
+  function sc(ws, ref, value, style, numFmt) {
+    const c = ws.getCell(ref);
+    c.value = value;
+    if (style) {
+      if (style.fill)      c.fill      = style.fill;
+      if (style.font)      c.font      = style.font;
+      if (style.alignment) c.alignment = style.alignment;
+      if (style.border)    c.border    = style.border;
+      if (style.numFmt || numFmt) c.numFmt = style.numFmt || numFmt;
+    }
+    return c;
+  }
+  function autoFilter(ws, ref) {
+    ws.autoFilter = ref;
+  }
+  function mergeStyle(ws, tl, br, value, style) {
+    ws.mergeCells(tl + ':' + br);
+    sc(ws, tl, value, style);
+  }
+
+  // ── HOJAS DE DATOS CRUDOS (solo si el usuario eligió "Data completa") ──
+  if (modoDescarga === 'todo') {
+
+  // ── HOJA CRUDO: EKBZ_PO ──────────────────────────────────────
+  if (filasPO) {
+    const ws = wb.addWorksheet('EKBZ_PO');
+    ws.columns = filasPO[0].map((h, i) => ({ header: String(h || ''), key: 'c' + i, width: i < 5 ? 20 : 14 }));
+    ws.getRow(1).eachCell(c => { c.fill = fill(C.VERDE); c.font = font(true, C.AMARILLO); c.alignment = alin('center'); c.border = borde(C.NEGRO); });
+    for (let i = 1; i < filasPO.length; i++) {
+      const row = ws.addRow(filasPO[i].map(v => v == null ? '' : v));
+      row.eachCell(c => { c.border = borde(); });
+    }
+    autoFilter(ws, ws.getRow(1).getCell(1).address + ':' + ws.getRow(1).getCell(filasPO[0].length).address);
+  }
+
+  // ── HOJA CRUDO: EKBZ_SHIPMNT ─────────────────────────────────
+  if (filasSHIP) {
+    const ws = wb.addWorksheet('EKBZ_SHIPMNT');
+    ws.columns = filasSHIP[0].map((h, i) => ({ header: String(h || ''), key: 'c' + i, width: i < 5 ? 20 : 14 }));
+    ws.getRow(1).eachCell(c => { c.fill = fill(C.VERDE); c.font = font(true, C.AMARILLO); c.alignment = alin('center'); c.border = borde(C.NEGRO); });
+    for (let i = 1; i < filasSHIP.length; i++) {
+      const row = ws.addRow(filasSHIP[i].map(v => v == null ? '' : v));
+      row.eachCell(c => { c.border = borde(); });
+    }
+    autoFilter(ws, ws.getRow(1).getCell(1).address + ':' + ws.getRow(1).getCell(filasSHIP[0].length).address);
+  }
+
+  // ── HOJA CRUDO: Data MR11 ────────────────────────────────────
+  if (filasMR) {
+    const ws = wb.addWorksheet('Data MR11');
+    ws.columns = filasMR[0].map((h, i) => ({ header: String(h || ''), key: 'c' + i, width: i < 5 ? 20 : 14 }));
+    ws.getRow(1).eachCell(c => { c.fill = fill(C.VERDE); c.font = font(true, C.AMARILLO); c.alignment = alin('center'); c.border = borde(C.NEGRO); });
+    for (let i = 1; i < filasMR.length; i++) {
+      const row = ws.addRow(filasMR[i].map(v => v == null ? '' : v));
+      row.eachCell(c => { c.border = borde(); });
+    }
+    autoFilter(ws, ws.getRow(1).getCell(1).address + ':' + ws.getRow(1).getCell(filasMR[0].length).address);
+  }
+
+  } // fin modoDescarga === 'todo'
+
+  // ── HOJA: Analisis EKBZ_PO ───────────────────────────────────
+  if (R.po) {
+    const ws = wb.addWorksheet('Analisis EKBZ_PO');
+    ws.columns = [{ width: 24 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 4 }, { width: 4 }, { width: 20 }, { width: 8 }, { width: 20 }];
+    ws.getRow(1).height = 28;
+
+    mergeStyle(ws, 'A1', 'E1', 'ANÁLISIS EKBZ_PO - COMPARACIÓN F vs M',
+      { fill: fill(C.GRIS), font: font(true, C.BLANCO, 14), alignment: alin('center') });
+
+    sc(ws, 'G4', 'Multiplicar x100', S.toggle);
+    sc(ws, 'H4', togglePO, S.toggleVal);
+    sc(ws, 'I4', 'Total', S.encAmari);
+    sc(ws, 'I5', R.po.filas.reduce((s, r) => s + r.vVar * facP, 0),
+      { fill: fill(C.VERDE), font: font(true, C.AMARILLO), alignment: alin('right'), border: borde(C.NEGRO), numFmt: C.NUM });
+
+    ['Orden de Compra', 'Valor F', 'Valor M', 'Variación (F - M)'].forEach((t, i) =>
+      sc(ws, String.fromCharCode(65 + i) + '4', t, S.encAmari));
+
+    R.po.filas.forEach((r, i) => {
+      const row = 5 + i;
+      sc(ws, 'A' + row, r.oc, S.datoTxt);
+      sc(ws, 'B' + row, r.vF, S.datoNum);
+      sc(ws, 'C' + row, r.vM, S.datoNum);
+      sc(ws, 'D' + row, r.vVar * facP, S.datoNum);
+    });
+
+    const filaTot = 5 + R.po.filas.length + 1;
+    sc(ws, 'A' + filaTot, 'TOTAL', S.encGris);
+    sc(ws, 'B' + filaTot, R.po.totF, S.totAmari);
+    sc(ws, 'C' + filaTot, R.po.totM, S.totAmari);
+    sc(ws, 'D' + filaTot, R.po.filas.reduce((s, r) => s + r.vVar * facP, 0), S.totAmari);
+
+    autoFilter(ws, 'A4:D4');
+  }
+
+  // ── HOJA: Analisis EKBZ_SHIPMNT ──────────────────────────────
+  if (R.ship) {
+    const ws = wb.addWorksheet('Analisis EKBZ_SHIPMNT');
+    ws.columns = [20,16,16,18,22,3,22,20,22,12,40,16,3,22,10,3,20,14].map(w => ({ width: w }));
+    ws.getRow(1).height = 28;
+
+    mergeStyle(ws, 'A1', 'E1', 'ANALISIS EKBZ_SHIPMNT - COMPARACION F vs M',
+      { fill: fill(C.VERDE), font: font(true, C.AMARILLO, 14), alignment: alin('center') });
+
+    ['Bill of Lading','Valor F','Valor M','Variacion (F - M)','Estado'].forEach((t, i) =>
+      sc(ws, String.fromCharCode(65 + i) + '4', t, S.encVerde));
+    ['Purchasing Document','Bill of Lading','Estado','Semana','Vendor','Monto'].forEach((t, i) =>
+      sc(ws, String.fromCharCode(71 + i) + '4', t, S.encVerde));
+    sc(ws, 'Q4', 'Bill of Lading', S.encVerde);
+    sc(ws, 'R4', 'Semana', S.encVerde);
+    sc(ws, 'N4', 'Total no procesadas', S.encVerde);
+    sc(ws, 'N5', R.ship.noProcesadas, S.pendRojo);
+    sc(ws, 'N7', 'Multiplicar x100', S.toggle);
+    sc(ws, 'O7', toggleSHIP, S.toggleVal);
+
+    R.ship.filas.forEach((r, i) => {
+      const row = 5 + i;
+      sc(ws, 'A' + row, r.bill, S.datoTxt);
+      sc(ws, 'B' + row, r.vF, S.datoNum);
+      sc(ws, 'C' + row, r.vM, S.datoNum);
+      sc(ws, 'D' + row, r.vVar * facS, S.datoNum);
+      sc(ws, 'E' + row, r.estado,
+        r.estado === 'Pendiente de procesar' ? S.pendRojo :
+        r.estado === 'Procesado'             ? S.procVerde : S.datoTxt);
+    });
+
+    const filaTotSH = 5 + R.ship.filas.length + 1;
+    sc(ws, 'A' + filaTotSH, 'TOTAL', S.encVerde);
+    sc(ws, 'B' + filaTotSH, R.ship.totF, S.totVerde);
+    sc(ws, 'C' + filaTotSH, R.ship.totM, S.totVerde);
+    sc(ws, 'D' + filaTotSH, R.ship.filas.reduce((s, r) => s + r.vVar * facS, 0), S.totVerde);
+
+    if (R.cruzada) {
+      R.cruzada.filas.forEach((f, i) => {
+        const row = 5 + i;
+        sc(ws, 'G' + row, f.oc, S.datoTxt);
+        sc(ws, 'H' + row, f.bill, S.datoTxt);
+        sc(ws, 'I' + row, f.estado, S.pendRojo);
+        sc(ws, 'J' + row, f.semana, { ...S.datoTxt, alignment: alin('center') });
+        sc(ws, 'K' + row, f.vendor, S.datoTxt);
+        sc(ws, 'L' + row, f.monto * facS, S.datoNum);
+      });
+      R.cruzada.unicos.forEach((u, i) => {
+        const row = 5 + i;
+        sc(ws, 'Q' + row, u.bill, S.datoTxt);
+        sc(ws, 'R' + row, u.semana, { ...S.datoTxt, alignment: alin('center') });
+      });
+    }
+
+    autoFilter(ws, 'A4:E4');
+    if (R.cruzada && R.cruzada.filas.length) autoFilter(ws, 'G4:L4');
+  }
+
+  // ── HOJA: Analisis MR11 ───────────────────────────────────────
+  if (R.mr) {
+    const ws = wb.addWorksheet('Analisis MR11');
+    ws.columns = [{ width: 24 }, { width: 60 }, { width: 24 }, { width: 18 }];
+    ws.getRow(1).height = 28;
+
+    mergeStyle(ws, 'A1', 'D1', 'ANÁLISIS MR11 - CRUCE CON SHIPMENTS',
+      { fill: fill(C.GRIS), font: font(true, C.BLANCO, 14), alignment: alin('center') });
+    sc(ws, 'A2', 'Filtrar por OC:', S.toggle);
+    sc(ws, 'B2', filtroOC_MR, S.toggleVal);
+
+    ['Orden de Compra','Shipments','Estado','Total Shipments'].forEach((t, i) =>
+      sc(ws, String.fromCharCode(65 + i) + '4', t, S.encAmari));
+
+    const filasMR2 = filtroOC_MR === 'TODAS' ? R.mr.filas : R.mr.filas.filter(r => r.oc === filtroOC_MR);
+    filasMR2.forEach((r, i) => {
+      const row = 5 + i;
+      sc(ws, 'A' + row, r.oc, S.datoTxt);
+      sc(ws, 'B' + row, r.bills, { ...S.datoTxt, alignment: alin('left', 'middle', true) });
+      sc(ws, 'C' + row, r.estado,
+        r.estado === 'Pendiente de procesar' ? S.pendRojo :
+        r.estado === 'Procesado'             ? S.procVerde : S.datoTxt);
+      sc(ws, 'D' + row, r.total,
+        r.total > 1 ? S.procVerde : { ...S.datoTxt, alignment: alin('center') });
+    });
+
+    autoFilter(ws, 'A4:D4');
+  }
+
+  // ── HOJA: Dashboard MR11 ─────────────────────────────────────
+  if (R.dash) {
+    const d = R.dash, colSem = d.arrSem;
+    const nSem = colSem.length;
+    const colTotalIdx = nSem + 1; // 1-based
+    const letraCol = n => n <= 26 ? String.fromCharCode(64 + n) : 'A' + String.fromCharCode(64 + n - 26);
+
+    const ws = wb.addWorksheet('Dashboard MR11');
+    const anchos = [40, ...colSem.map(() => 18), 18];
+    ws.columns = anchos.map(w => ({ width: w }));
+    ws.getRow(1).height = 32;
+    ws.getRow(3).height = 28;
+
+    // Título
+    mergeStyle(ws, 'A1', letraCol(colTotalIdx) + '1',
+      'DASHBOARD MR11 - ANÁLISIS POR SEMANAS (Solo Pendientes)',
+      { fill: fill(C.VERDE), font: font(true, C.AMARILLO, 16), alignment: alin('center') });
+
+    // Encabezados pivote fila 3
+    sc(ws, 'A3', 'Proveedor', S.encVerde);
+    colSem.forEach((s, i) => sc(ws, letraCol(2 + i) + '3', s, S.encVerde));
+    sc(ws, letraCol(colTotalIdx) + '3', 'TOTAL', S.encVerde);
+
+    // Datos pivote
+    const totSemS = {}, totSemM = {};
+    let totSG = 0, totMG = 0;
+    let fPiv = 4;
+
+    for (const prov of d.arrProv) {
+      let tS = 0, tM = 0;
+      sc(ws, 'A' + fPiv, prov, S.pivProv);
+      sc(ws, 'A' + (fPiv + 1), '   Monto', S.grisClaro);
+
+      colSem.forEach((sem, i) => {
+        const nS = d.pivotShips[prov + '||' + sem] || 0;
+        const nM = (d.pivotMontos[prov + '||' + sem] || 0) * facS;
+        sc(ws, letraCol(2 + i) + fPiv, nS, S.pivProvC);
+        sc(ws, letraCol(2 + i) + (fPiv + 1), nM, S.grisClaroN);
+        tS += nS; tM += nM;
+        totSemS[sem] = (totSemS[sem] || 0) + nS;
+        totSemM[sem] = (totSemM[sem] || 0) + nM;
+      });
+
+      sc(ws, letraCol(colTotalIdx) + fPiv, tS, S.pivProvC);
+      sc(ws, letraCol(colTotalIdx) + (fPiv + 1), tM, S.grisClaroN);
+      totSG += tS; totMG += tM;
+      fPiv += 2;
+    }
+
+    // TOTAL Shipments
+    sc(ws, 'A' + fPiv, 'TOTAL Shipments', S.encGris);
+    colSem.forEach((s, i) => sc(ws, letraCol(2 + i) + fPiv, totSemS[s] || 0, S.totGrisC));
+    sc(ws, letraCol(colTotalIdx) + fPiv, totSG, S.totGrisC);
+    fPiv++;
+
+    // TOTAL Monto
+    sc(ws, 'A' + fPiv, 'TOTAL Monto', S.encGris);
+    colSem.forEach((s, i) => sc(ws, letraCol(2 + i) + fPiv, totSemM[s] || 0, S.totGris));
+    sc(ws, letraCol(colTotalIdx) + fPiv, totMG, S.totGris);
+    fPiv += 2;
+
+    // Título detalle
+    const fDetTit = fPiv + 1;
+    mergeStyle(ws, 'A' + fDetTit, 'E' + fDetTit, 'DETALLE POR SHIPMENT - OCs ASOCIADAS',
+      { fill: fill(C.VERDE), font: font(true, C.AMARILLO, 13), alignment: alin('center') });
+    ws.getRow(fDetTit).height = 26;
+
+    // Filtros
+    const fFiltro = fDetTit + 1;
+    sc(ws, 'A' + fFiltro, 'Filtrar Semana:', S.toggle);
+    sc(ws, 'B' + fFiltro, filtroSemDash, S.toggleVal);
+    sc(ws, 'D' + fFiltro, 'Filtrar Vendor:', S.toggle);
+    sc(ws, 'E' + fFiltro, filtroVenDash, S.toggleVal);
+
+    // Encabezados detalle
+    const fEncDet = fFiltro + 2;
+    ['Shipment','Semana','Estado','# OCs','Vendor'].forEach((t, i) =>
+      sc(ws, String.fromCharCode(65 + i) + fEncDet, t, S.encVerde));
+
+    autoFilter(ws, 'A' + fEncDet + ':E' + fEncDet);
+
+    // Filas de detalle
+    const detFiltrado = d.detalle.filter(x =>
+      (filtroSemDash === 'TODAS' || x.semana === filtroSemDash) &&
+      (filtroVenDash === 'TODOS' || x.vendor === filtroVenDash));
+
+    let fDet = fEncDet + 1;
+    for (const x of detFiltrado) {
+      sc(ws, 'A' + fDet, x.ship, S.shipDet);
+      sc(ws, 'B' + fDet, x.semana, S.shipDetC);
+      sc(ws, 'C' + fDet, 'Pendiente de procesar', S.shipDetC);
+      sc(ws, 'D' + fDet, x.ocs.length, S.shipDetC);
+      sc(ws, 'E' + fDet, x.vendor, S.shipDet);
+      fDet++;
+      for (const oc of x.ocs) {
+        sc(ws, 'A' + fDet, '    ' + oc, S.ocDet);
+        sc(ws, 'B' + fDet, x.semana, S.ocDetC);
+        sc(ws, 'C' + fDet, 'Pendiente de procesar', S.ocDetPend);
+        sc(ws, 'D' + fDet, null, S.ocDet);
+        sc(ws, 'E' + fDet, x.vendor, S.ocDet);
+        fDet++;
+      }
+    }
+  }
+
+  // Generar y descargar
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const hoy = new Date();
+  const marca = hoy.getFullYear() + String(hoy.getMonth() + 1).padStart(2, '0') + String(hoy.getDate()).padStart(2, '0');
+  a.href = url; a.download = 'Analisis_EKBZ_MR11_' + marca + '.xlsx';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+document.getElementById('btnDescargar').addEventListener('click', descargarExcelFormateado);
+
+</script>
+</body>
+</html>

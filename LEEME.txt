@@ -1,0 +1,15 @@
+ANALIZADOR MR11 — VERSIÓN CON CARPETA SEPARADA
+================================================
+1. NO muevas "analizador_mr11.html" fuera de esta carpeta sin la carpeta "libs".
+2. Para usarlo: doble clic en "analizador_mr11.html".
+3. Para compartir: comparte la CARPETA COMPLETA (o este zip), no solo el .html.
+
+Contenido:
+- analizador_mr11.html    -> el dashboard MR11 (liviano)
+- libs/xlsx.full.min.js   -> SheetJS 0.18.5 (lector Excel: xlsx, xls, xlsb, xlsm)
+- libs/papaparse.min.js   -> PapaParse 5.5.4 (lector CSV)
+- libs/chart.umd.js       -> Chart.js 4.5.1 (gráficas)
+
+100% offline: ni el HTML ni las librerías hacen peticiones de red.
+Son las mismas librerías del Analizador BPO — si ya tienes esa carpeta,
+puedes apuntar ambos HTML a una sola carpeta libs compartida.
